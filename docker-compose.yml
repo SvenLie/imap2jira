@@ -1,0 +1,15 @@
+version: "3.7"
+
+services:
+  imap2jira:
+    build:
+      context: "docker"
+      dockerfile: Dockerfile
+    container_name: imap2jira
+    restart: always
+    working_dir: /go/src/app
+    env_file:
+      - .env
+    volumes:
+      - ./service:/go/src/app
+      - ./structure.json:/go/src/app/structure.json
