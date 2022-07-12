@@ -12,4 +12,5 @@ services:
       - .env
     volumes:
       - ./service:/go/src/app
-      - ./structure.json:/go/src/app/structure.json
+      - ./structure_new_issue.json:/go/src/app/structure_new_issue.json
+      - ./structure_add_comment.json:/go/src/app/structure_add_comment.json
