@@ -85,11 +85,11 @@ func makeGetRequest(endpoint string) *http.Response {
 	return resp
 }
 
-func setMailAsUnseen(c *client.Client, currentMail uint32) {
+func setMailAsSeenForService(c *client.Client, currentMail uint32) {
 	seqSet := new(imap.SeqSet)
 	seqSet.AddRange(currentMail, currentMail)
 
-	if err := c.Store(seqSet, imap.RemoveFlags, []interface{}{imap.SeenFlag}, nil); err != nil {
+	if err := c.Store(seqSet, imap.AddFlags, []interface{}{imap.ImportantFlag}, nil); err != nil {
 		log.Println("IMAP Message Flag Update Failed")
 		log.Println(err)
 		os.Exit(1)
@@ -135,7 +135,7 @@ func run() {
 	}
 
 	criteria := imap.NewSearchCriteria()
-	criteria.WithoutFlags = []string{"\\Seen"}
+	criteria.WithoutFlags = []string{imap.ImportantFlag}
 	uids, err := c.Search(criteria)
 	if err != nil {
 		log.Println(err)
@@ -202,15 +202,14 @@ func run() {
 					resp := makeGetRequest("/rest/api/3/issue/" + issueNumber)
 
 					if resp.StatusCode != 200 {
-						setMailAsUnseen(c, currentUid)
 						printErrorFromApi(resp)
 					} else {
 						resp := makePostRequest("/rest/api/3/issue/"+issueNumber+"/comment", jsonString)
 
 						if resp.StatusCode != 201 {
-							setMailAsUnseen(c, currentUid)
 							printErrorFromApi(resp)
 						} else {
+							setMailAsSeenForService(c, currentUid)
 							log.Println("Success add comment")
 						}
 					}
@@ -229,9 +228,9 @@ func run() {
 					resp := makePostRequest("/rest/api/3/issue", jsonString)
 
 					if resp.StatusCode != 201 {
-						setMailAsUnseen(c, currentUid)
 						printErrorFromApi(resp)
 					} else {
+						setMailAsSeenForService(c, currentUid)
 						log.Println("Success add issue")
 					}
 				}

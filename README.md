@@ -1,5 +1,5 @@
 # imap2jira
-This tool reads a mailbox and search for unseen mails. These mails are converted into JIRA tickets. You have to customize structure_new_issue.json and structure_add_comment.json for your workflow.
+This tool reads a mailbox and search for mails without important (\\IMPORTANT). These mails are converted into JIRA tickets. You have to customize structure_new_issue.json and structure_add_comment.json for your workflow.
 
 You can run this tool with docker (image and docker-compose are provided in this project)
 
