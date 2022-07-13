@@ -15,6 +15,6 @@ jobs:
           password: ${{ secrets.DOCKER_TOKEN }}
       - uses: actions/checkout@v3
       - name: Build the imap2jira docker image
-        run: docker build . --file ./Dockerfile --tag svenlie/imap2jira:${GITHUB_REF##*/} --tag gsvenlie/imap2jira:latest
+        run: docker build . --file ./Dockerfile --tag svenlie/imap2jira:${GITHUB_REF##*/} --tag svenlie/imap2jira:latest
       - name: Push imap2jira docker images
         run: docker push svenlie/imap2jira --all-tags
