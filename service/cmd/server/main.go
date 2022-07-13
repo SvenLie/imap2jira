@@ -188,7 +188,7 @@ func run() {
 				sanitizedBody := getMailBody(p)
 
 				if isMessageWithIssueNumber {
-					content, err := ioutil.ReadFile("structure_add_comment.json")
+					content, err := ioutil.ReadFile("/go/src/app/structure_add_comment.json")
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -215,7 +215,7 @@ func run() {
 					}
 
 				} else {
-					content, err := ioutil.ReadFile("structure_new_issue.json")
+					content, err := ioutil.ReadFile("/go/src/app/structure_new_issue.json")
 					if err != nil {
 						log.Fatal(err)
 					}
