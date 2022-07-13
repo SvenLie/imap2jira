@@ -9,7 +9,7 @@ RUN go mod download
 WORKDIR /go/src/app
 ADD service/cmd cmd
 WORKDIR /go/src/app/cmd/server
-RUN go build -o app-server
+RUN go build -o /app-server
 
 RUN apk --no-cache update
 RUN apk --no-cache upgrade
