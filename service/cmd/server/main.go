@@ -111,6 +111,7 @@ func run() {
 	imapServerPort := os.Getenv("IMAP_PORT")
 	imapUser := os.Getenv("IMAP_USER")
 	imapPassword := os.Getenv("IMAP_PASSWORD")
+	jiraApiVersion := os.Getenv("JIRA_API_VERSION")
 
 	// Connect to server
 	c, err := client.DialTLS(imapServer+":"+imapServerPort, nil)
@@ -199,12 +200,12 @@ func run() {
 
 					issueNumber := subject[strings.LastIndex(subject, "[")+1 : strings.LastIndex(subject, "]")]
 
-					resp := makeGetRequest("/rest/api/3/issue/" + issueNumber)
+					resp := makeGetRequest("/rest/api/" + jiraApiVersion + "/issue/" + issueNumber)
 
 					if resp.StatusCode != 200 {
 						printErrorFromApi(resp)
 					} else {
-						resp := makePostRequest("/rest/api/3/issue/"+issueNumber+"/comment", jsonString)
+						resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/comment", jsonString)
 
 						if resp.StatusCode != 201 {
 							printErrorFromApi(resp)
@@ -225,7 +226,9 @@ func run() {
 					jsonString = strings.Replace(jsonString, "%SUMMARY%", subject, 1)
 					jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
 
-					resp := makePostRequest("/rest/api/3/issue", jsonString)
+					log.Println(jsonString)
+
+					resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue", jsonString)
 
 					if resp.StatusCode != 201 {
 						printErrorFromApi(resp)
