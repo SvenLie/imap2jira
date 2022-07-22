@@ -1,1 +1,1 @@
-{"body":{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"text":"%SUMMARY%","type":"text","marks":[{"type":"strong"}]}]},{"type":"paragraph","content":[{"text":"%DESCRIPTION%","type":"text"}]}]}}
+{"body": "*%SUMMARY%*\r\n\r\n%DESCRIPTION%"}
