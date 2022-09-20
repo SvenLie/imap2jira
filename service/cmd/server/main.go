@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
+	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/robfig/cron/v3"
@@ -46,6 +47,13 @@ func getMailBody(p *mail.Part) string {
 	body, _ := ioutil.ReadAll(p.Body)
 	plainTextBody := strings.Replace(string(body), "\n", "\\n", -1)
 	plainTextBody = strings.Replace(plainTextBody, "\r", "\\r", -1)
+
+	regex, err := regexp.Compile(`[^\w] && [\\]`)
+	if err != nil {
+		log.Fatal(err)
+	}
+	plainTextBody = regex.ReplaceAllString(plainTextBody, " ")
+
 	return sanitizePolicy.Sanitize(plainTextBody)
 }
 
