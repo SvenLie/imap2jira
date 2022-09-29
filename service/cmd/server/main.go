@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
@@ -12,12 +14,17 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
 )
+
+type AddIssueResponse struct {
+	Key string `json:"key"`
+}
 
 func main() {
 	cronInterval := os.Getenv("CRON")
@@ -30,6 +37,27 @@ func main() {
 	signal.Notify(sig, os.Interrupt, os.Kill)
 	<-sig
 
+}
+
+func jsonEscape(i string) string {
+	b, err := json.Marshal(i)
+	if err != nil {
+		log.Println(err)
+	}
+	s := string(b)
+	return s[1:len(s)-1]
+}
+
+func getAddIssueResponse(resp *http.Response) AddIssueResponse {
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	response := AddIssueResponse{}
+	json.Unmarshal(bodyBytes, &response)
+
+	return response
 }
 
 func printErrorFromApi(resp *http.Response) {
@@ -45,16 +73,14 @@ func printErrorFromApi(resp *http.Response) {
 func getMailBody(p *mail.Part) string {
 	sanitizePolicy := bluemonday.UGCPolicy()
 	body, _ := ioutil.ReadAll(p.Body)
-	plainTextBody := strings.Replace(string(body), "\n", "\\n", -1)
-	plainTextBody = strings.Replace(plainTextBody, "\r", "\\r", -1)
 
 	regex, err := regexp.Compile(`[^\w] && [\\]`)
 	if err != nil {
 		log.Fatal(err)
 	}
-	plainTextBody = regex.ReplaceAllString(plainTextBody, " ")
+	plainTextBody := regex.ReplaceAllString(string(body), " ")
 
-	return sanitizePolicy.Sanitize(plainTextBody)
+	return jsonEscape(sanitizePolicy.Sanitize(plainTextBody))
 }
 
 func makePostRequest(endpoint string, body string) *http.Response {
@@ -70,7 +96,46 @@ func makePostRequest(endpoint string, body string) *http.Response {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer resp.Body.Close()
+
+	return resp
+}
+
+func makePostRequestWithFile(endpoint string, filename string) *http.Response {
+	jiraUrl := os.Getenv("JIRA_URL")
+	jiraUser := os.Getenv("JIRA_USER")
+	jiraPassword := os.Getenv("JIRA_PASSWORD")
+
+	clt := &http.Client{}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fileContents, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	body := new(bytes.Buffer)
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	part.Write(fileContents)
+	err = writer.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req, err := http.NewRequest("POST", jiraUrl+endpoint, body)
+	req.Header.Add("X-Atlassian-Token", "no-check")
+	req.Header.Add("Content-Type", writer.FormDataContentType())
+	req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(jiraUser+":"+jiraPassword)))
+	resp, err := clt.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return resp
 }
@@ -171,6 +236,11 @@ func run() {
 
 		isMessageWithIssueNumber, _ := regexp.MatchString("^.*\\[.*-\\d+]$", subject)
 
+		issueNumber := ""
+		if isMessageWithIssueNumber {
+			issueNumber = subject[strings.LastIndex(subject, "[")+1 : strings.LastIndex(subject, "]")]
+		}
+
 		mr, err := mail.CreateReader(r)
 		if err != nil {
 			log.Fatal(err)
@@ -192,9 +262,14 @@ func run() {
 				log.Fatal(err)
 			}
 
-			switch p.Header.(type) {
+			switch h := p.Header.(type) {
 			case *mail.InlineHeader:
 				sanitizedBody := getMailBody(p)
+				contentType, _, _ := h.ContentType()
+
+				if contentType != "text/plain" {
+					continue
+				}
 
 				if isMessageWithIssueNumber {
 					content, err := ioutil.ReadFile("/go/src/app/structure_add_comment.json")
@@ -206,8 +281,6 @@ func run() {
 					jsonString = strings.Replace(jsonString, "%SUMMARY%", subject+" ("+sender.Name+" <"+sender.Address+">)", 1)
 					jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
 
-					issueNumber := subject[strings.LastIndex(subject, "[")+1 : strings.LastIndex(subject, "]")]
-
 					resp := makeGetRequest("/rest/api/" + jiraApiVersion + "/issue/" + issueNumber)
 
 					if resp.StatusCode != 200 {
@@ -216,11 +289,13 @@ func run() {
 						resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/comment", jsonString)
 
 						if resp.StatusCode != 201 {
+							println("Error while adding comment")
 							printErrorFromApi(resp)
 						} else {
 							setMailAsSeenForService(c, currentUid)
-							log.Println("Success add comment")
+							log.Println("Success add comment for issue " + issueNumber)
 						}
+						defer resp.Body.Close()
 					}
 
 				} else {
@@ -234,19 +309,42 @@ func run() {
 					jsonString = strings.Replace(jsonString, "%SUMMARY%", subject, 1)
 					jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
 
-					log.Println(jsonString)
-
 					resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue", jsonString)
 
 					if resp.StatusCode != 201 {
+						println("Error while adding issue")
 						printErrorFromApi(resp)
 					} else {
+						issueNumber = getAddIssueResponse(resp).Key
 						setMailAsSeenForService(c, currentUid)
-						log.Println("Success add issue")
+						log.Println("Success add issue " + issueNumber)
 					}
 				}
+			case *mail.AttachmentHeader:
+				filename, _ := h.Filename()
+				log.Println("Found attachment \"" + filename + "\" for issue number " + issueNumber)
+				file, err := os.Create("/tmp/" + filename)
+				if err != nil {
+					log.Fatal(err)
+				}
+				_, err = io.Copy(file, p.Body)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if issueNumber == "" {
+					log.Fatal("Error, no issue number for attachment found")
+				}
+
+				resp := makePostRequestWithFile("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/attachments", "/tmp/"+filename)
+				if resp.StatusCode != 200 {
+					println("Error while adding attachment for issue " + issueNumber)
+					printErrorFromApi(resp)
+				} else {
+					log.Println("Success add attachment for issue " + issueNumber)
+				}
+				defer resp.Body.Close()
 			}
-			break
 		}
 	}
 
