@@ -45,7 +45,7 @@ func jsonEscape(i string) string {
 		log.Println(err)
 	}
 	s := string(b)
-	return s[1:len(s)-1]
+	return s[1 : len(s)-1]
 }
 
 func getAddIssueResponse(resp *http.Response) AddIssueResponse {
@@ -158,6 +158,12 @@ func makeGetRequest(endpoint string) *http.Response {
 	return resp
 }
 
+func replaceQuotationMarks(value string) string {
+	value = strings.Replace(value, "\"", "'", -1)
+
+	return value
+}
+
 func setMailAsSeenForService(c *client.Client, currentMail uint32) {
 	seqSet := new(imap.SeqSet)
 	seqSet.AddRange(currentMail, currentMail)
@@ -232,7 +238,7 @@ func run() {
 		currentUid := uids[currentMessage]
 
 		r := message.GetBody(&section)
-		subject := message.Envelope.Subject
+		subject := replaceQuotationMarks(message.Envelope.Subject)
 
 		isMessageWithIssueNumber, _ := regexp.MatchString("^.*\\[.*-\\d+]$", subject)
 
@@ -264,7 +270,7 @@ func run() {
 
 			switch h := p.Header.(type) {
 			case *mail.InlineHeader:
-				sanitizedBody := getMailBody(p)
+				sanitizedBody := replaceQuotationMarks(getMailBody(p))
 				contentType, _, _ := h.ContentType()
 
 				if contentType != "text/plain" {
