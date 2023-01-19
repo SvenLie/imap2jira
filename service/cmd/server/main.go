@@ -290,6 +290,7 @@ func run() {
 
 						if resp.StatusCode != 201 {
 							println("Error while adding comment")
+							println(jsonString)
 							printErrorFromApi(resp)
 						} else {
 							setMailAsSeenForService(c, currentUid)
@@ -313,6 +314,7 @@ func run() {
 
 					if resp.StatusCode != 201 {
 						println("Error while adding issue")
+						println(jsonString)
 						printErrorFromApi(resp)
 					} else {
 						issueNumber = getAddIssueResponse(resp).Key
