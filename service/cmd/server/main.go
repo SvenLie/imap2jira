@@ -10,9 +10,8 @@ import (
 	_ "github.com/emersion/go-message/charset"
 	"github.com/emersion/go-message/mail"
 	"github.com/microcosm-cc/bluemonday"
-	"github.com/robfig/cron/v3"
+	"github.com/robfig/cron"
 	"io"
-	"io/ioutil"
 	"log"
 	"mime/multipart"
 	"net/http"
@@ -22,34 +21,57 @@ import (
 	"strings"
 )
 
+var jiraApiVersion string
+var cronInterval string
+var jiraUrl string
+var jiraUser string
+var jiraPassword string
+var imapServer string
+var imapServerPort string
+var imapUser string
+var imapPassword string
+var httpClient *http.Client
+
+var bodySection imap.BodySectionName
+
 type AddIssueResponse struct {
 	Key string `json:"key"`
 }
 
 func main() {
-	cronInterval := os.Getenv("CRON")
-	c := cron.New()
-	c.AddFunc(cronInterval, func() {
+	jiraApiVersion = os.Getenv("JIRA_API_VERSION")
+	cronInterval = os.Getenv("CRON")
+	jiraUrl = os.Getenv("JIRA_URL")
+	jiraUser = os.Getenv("JIRA_USER")
+	jiraPassword = os.Getenv("JIRA_PASSWORD")
+	imapServer = os.Getenv("IMAP_SERVER")
+	imapServerPort = os.Getenv("IMAP_PORT")
+	imapUser = os.Getenv("IMAP_USER")
+	imapPassword = os.Getenv("IMAP_PASSWORD")
+	httpClient = &http.Client{}
+
+	cr := cron.New()
+	cr.AddFunc(cronInterval, func() {
 		run()
 	})
-	go c.Start()
+	go cr.Start()
 	sig := make(chan os.Signal)
 	signal.Notify(sig, os.Interrupt, os.Kill)
 	<-sig
 
 }
 
-func jsonEscape(i string) string {
-	b, err := json.Marshal(i)
+func jsonEscape(content string) string {
+	jsonByte, err := json.Marshal(content)
 	if err != nil {
 		log.Println(err)
 	}
-	s := string(b)
-	return s[1 : len(s)-1]
+	jsonString := string(jsonByte)
+	return jsonString[1 : len(jsonString)-1]
 }
 
 func getAddIssueResponse(resp *http.Response) AddIssueResponse {
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -61,7 +83,7 @@ func getAddIssueResponse(resp *http.Response) AddIssueResponse {
 }
 
 func printErrorFromApi(resp *http.Response) {
-	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +94,7 @@ func printErrorFromApi(resp *http.Response) {
 
 func getMailBody(p *mail.Part) string {
 	sanitizePolicy := bluemonday.UGCPolicy()
-	body, _ := ioutil.ReadAll(p.Body)
+	body, _ := io.ReadAll(p.Body)
 
 	regex, err := regexp.Compile(`[^\w] && [\\]`)
 	if err != nil {
@@ -84,15 +106,10 @@ func getMailBody(p *mail.Part) string {
 }
 
 func makePostRequest(endpoint string, body string) *http.Response {
-	jiraUrl := os.Getenv("JIRA_URL")
-	jiraUser := os.Getenv("JIRA_USER")
-	jiraPassword := os.Getenv("JIRA_PASSWORD")
-
-	clt := &http.Client{}
 	req, err := http.NewRequest("POST", jiraUrl+endpoint, strings.NewReader(body))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(jiraUser+":"+jiraPassword)))
-	resp, err := clt.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -101,17 +118,11 @@ func makePostRequest(endpoint string, body string) *http.Response {
 }
 
 func makePostRequestWithFile(endpoint string, filename string) *http.Response {
-	jiraUrl := os.Getenv("JIRA_URL")
-	jiraUser := os.Getenv("JIRA_USER")
-	jiraPassword := os.Getenv("JIRA_PASSWORD")
-
-	clt := &http.Client{}
-
 	file, err := os.Open(filename)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fileContents, err := ioutil.ReadAll(file)
+	fileContents, err := io.ReadAll(file)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -132,7 +143,7 @@ func makePostRequestWithFile(endpoint string, filename string) *http.Response {
 	req.Header.Add("X-Atlassian-Token", "no-check")
 	req.Header.Add("Content-Type", writer.FormDataContentType())
 	req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(jiraUser+":"+jiraPassword)))
-	resp, err := clt.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -141,82 +152,132 @@ func makePostRequestWithFile(endpoint string, filename string) *http.Response {
 }
 
 func makeGetRequest(endpoint string) *http.Response {
-	jiraUrl := os.Getenv("JIRA_URL")
-	jiraUser := os.Getenv("JIRA_USER")
-	jiraPassword := os.Getenv("JIRA_PASSWORD")
-
-	clt := &http.Client{}
 	req, err := http.NewRequest("GET", jiraUrl+endpoint, strings.NewReader(""))
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(jiraUser+":"+jiraPassword)))
-	resp, err := clt.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer resp.Body.Close()
 
 	return resp
 }
 
 func replaceQuotationMarks(value string) string {
 	value = strings.Replace(value, "\"", "'", -1)
-
+	value = strings.Replace(value, "\\'", "'", -1)
 	return value
 }
 
-func setMailAsSeenForService(c *client.Client, currentMail uint32) {
+func setMailAsSeenForService(imapClient *client.Client, currentMail uint32) {
 	seqSet := new(imap.SeqSet)
 	seqSet.AddRange(currentMail, currentMail)
 
-	if err := c.Store(seqSet, imap.AddFlags, []interface{}{imap.ImportantFlag}, nil); err != nil {
+	if err := imapClient.Store(seqSet, imap.AddFlags, []interface{}{imap.ImportantFlag}, nil); err != nil {
 		log.Println("IMAP Message Flag Update Failed")
 		log.Println(err)
 		os.Exit(1)
 	}
 
-	if err := c.Expunge(nil); err != nil {
+	if err := imapClient.Expunge(nil); err != nil {
 		log.Println("IMAP Message mark as unseen Failed")
 		os.Exit(1)
 	}
 }
 
-func run() {
-
-	// ============================================================
-	// Configuration
-	log.Println("Connecting to server...")
-
-	imapServer := os.Getenv("IMAP_SERVER")
-	imapServerPort := os.Getenv("IMAP_PORT")
-	imapUser := os.Getenv("IMAP_USER")
-	imapPassword := os.Getenv("IMAP_PASSWORD")
-	jiraApiVersion := os.Getenv("JIRA_API_VERSION")
-
-	// Connect to server
-	c, err := client.DialTLS(imapServer+":"+imapServerPort, nil)
+func addCommentToIssue(imapClient *client.Client, issueNumber string, subject string, sanitizedBody string, sender *mail.Address, currentUid uint32) {
+	content, err := os.ReadFile("/go/src/app/structure_add_comment.json")
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Connected")
+	// Convert []byte to string and print to screen
+	jsonString := string(content)
+	jsonString = strings.Replace(jsonString, "%SUMMARY%", subject+" ("+sender.Name+" <"+sender.Address+">)", 1)
+	jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
 
-	// Don't forget to logout
-	defer c.Logout()
+	resp := makeGetRequest("/rest/api/" + jiraApiVersion + "/issue/" + issueNumber)
 
-	// Login
-	if err := c.Login(imapUser, imapPassword); err != nil {
+	if resp.StatusCode != 200 {
+		printErrorFromApi(resp)
+	} else {
+		resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/comment", jsonString)
+
+		if resp.StatusCode != 201 {
+			println("Error while adding comment")
+			println(jsonString)
+			printErrorFromApi(resp)
+		} else {
+			setMailAsSeenForService(imapClient, currentUid)
+			log.Println("Success add comment for issue " + issueNumber)
+		}
+	}
+}
+
+func addIssue(imapClient *client.Client, subject string, sanitizedBody string, currentUid uint32) string {
+	content, err := os.ReadFile("/go/src/app/structure_new_issue.json")
+	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("Logged in")
 
+	// Convert []byte to string and print to screen
+	jsonString := string(content)
+	jsonString = strings.Replace(jsonString, "%SUMMARY%", subject, 1)
+	jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
+
+	resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue", jsonString)
+
+	var issueNumber string
+	if resp.StatusCode != 201 {
+		println("Error while adding issue")
+		println(jsonString)
+		printErrorFromApi(resp)
+	} else {
+		issueNumber = getAddIssueResponse(resp).Key
+		setMailAsSeenForService(imapClient, currentUid)
+		log.Println("Success add issue " + issueNumber)
+	}
+	return issueNumber
+}
+
+func addFileToIssue(issueNumber string, headerTypePart *mail.AttachmentHeader, mailPart *mail.Part) {
+	filename, _ := headerTypePart.Filename()
+	if filename == "" {
+		return
+	}
+
+	log.Println("Found attachment \"" + filename + "\" for issue number " + issueNumber)
+	file, err := os.Create("/tmp/" + filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = io.Copy(file, mailPart.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if issueNumber == "" {
+		log.Fatal("Error, no issue number for attachment found")
+	}
+
+	resp := makePostRequestWithFile("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/attachments", "/tmp/"+filename)
+	if resp.StatusCode != 200 {
+		println("Error while adding attachment for issue " + issueNumber)
+		printErrorFromApi(resp)
+	} else {
+		log.Println("Success add attachment for issue " + issueNumber)
+	}
+}
+
+func getRelevantMessagesAndUids(imapClient *client.Client) (chan *imap.Message, []uint32) {
 	// Select INBOX
-	_, err = c.Select("INBOX", false)
+	_, err := imapClient.Select("INBOX", false)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	criteria := imap.NewSearchCriteria()
 	criteria.WithoutFlags = []string{imap.ImportantFlag}
-	uids, err := c.Search(criteria)
+	uids, err := imapClient.Search(criteria)
 	if err != nil {
 		log.Println(err)
 	}
@@ -225,19 +286,41 @@ func run() {
 	messageSet := new(imap.SeqSet)
 	messageSet.AddNum(uids...)
 
-	var section imap.BodySectionName
-	items := []imap.FetchItem{section.FetchItem(), imap.FetchEnvelope}
+	items := []imap.FetchItem{bodySection.FetchItem(), imap.FetchEnvelope}
 
 	messages := make(chan *imap.Message, len(uids))
-	err = c.Fetch(messageSet, items, messages)
+	err = imapClient.Fetch(messageSet, items, messages)
+
+	return messages, uids
+}
+
+func run() {
+
+	// ============================================================
+	// Configuration
+	log.Println("Connecting to server...")
+
+	// Connect to server
+	imapClient, err := client.DialTLS(imapServer+":"+imapServerPort, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Connected")
+
+	// Login
+	if err := imapClient.Login(imapUser, imapPassword); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Logged in")
 
 	currentMessage := -1
+	messages, uids := getRelevantMessagesAndUids(imapClient)
 
 	for message := range messages {
 		currentMessage = currentMessage + 1
 		currentUid := uids[currentMessage]
 
-		r := message.GetBody(&section)
+		messageBody := message.GetBody(&bodySection)
 		subject := replaceQuotationMarks(message.Envelope.Subject)
 
 		isMessageWithIssueNumber, _ := regexp.MatchString("^.*\\[.*-\\d+]$", subject)
@@ -247,7 +330,7 @@ func run() {
 			issueNumber = subject[strings.LastIndex(subject, "[")+1 : strings.LastIndex(subject, "]")]
 		}
 
-		mr, err := mail.CreateReader(r)
+		mr, err := mail.CreateReader(messageBody)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -261,99 +344,32 @@ func run() {
 		sender := senderArray[0]
 
 		for {
-			p, err := mr.NextPart()
+			mailPart, err := mr.NextPart()
 			if err == io.EOF {
 				break
 			} else if err != nil {
 				log.Fatal(err)
 			}
 
-			switch h := p.Header.(type) {
+			switch headerTypePart := mailPart.Header.(type) {
 			case *mail.InlineHeader:
-				sanitizedBody := replaceQuotationMarks(getMailBody(p))
-				contentType, _, _ := h.ContentType()
+				sanitizedBody := replaceQuotationMarks(getMailBody(mailPart))
+				contentType, _, _ := headerTypePart.ContentType()
 
 				if contentType != "text/plain" {
 					continue
 				}
 
 				if isMessageWithIssueNumber {
-					content, err := ioutil.ReadFile("/go/src/app/structure_add_comment.json")
-					if err != nil {
-						log.Fatal(err)
-					}
-					// Convert []byte to string and print to screen
-					jsonString := string(content)
-					jsonString = strings.Replace(jsonString, "%SUMMARY%", subject+" ("+sender.Name+" <"+sender.Address+">)", 1)
-					jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
-
-					resp := makeGetRequest("/rest/api/" + jiraApiVersion + "/issue/" + issueNumber)
-
-					if resp.StatusCode != 200 {
-						printErrorFromApi(resp)
-					} else {
-						resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/comment", jsonString)
-
-						if resp.StatusCode != 201 {
-							println("Error while adding comment")
-							println(jsonString)
-							printErrorFromApi(resp)
-						} else {
-							setMailAsSeenForService(c, currentUid)
-							log.Println("Success add comment for issue " + issueNumber)
-						}
-						defer resp.Body.Close()
-					}
-
+					addCommentToIssue(imapClient, issueNumber, subject, sanitizedBody, sender, currentUid)
 				} else {
-					content, err := ioutil.ReadFile("/go/src/app/structure_new_issue.json")
-					if err != nil {
-						log.Fatal(err)
-					}
-
-					// Convert []byte to string and print to screen
-					jsonString := string(content)
-					jsonString = strings.Replace(jsonString, "%SUMMARY%", subject, 1)
-					jsonString = strings.Replace(jsonString, "%DESCRIPTION%", strings.TrimSpace(sanitizedBody), 1)
-
-					resp := makePostRequest("/rest/api/"+jiraApiVersion+"/issue", jsonString)
-
-					if resp.StatusCode != 201 {
-						println("Error while adding issue")
-						println(jsonString)
-						printErrorFromApi(resp)
-					} else {
-						issueNumber = getAddIssueResponse(resp).Key
-						setMailAsSeenForService(c, currentUid)
-						log.Println("Success add issue " + issueNumber)
-					}
+					issueNumber = addIssue(imapClient, subject, sanitizedBody, currentUid)
 				}
 			case *mail.AttachmentHeader:
-				filename, _ := h.Filename()
-				log.Println("Found attachment \"" + filename + "\" for issue number " + issueNumber)
-				file, err := os.Create("/tmp/" + filename)
-				if err != nil {
-					log.Fatal(err)
+				if issueNumber != "" {
+					addFileToIssue(issueNumber, headerTypePart, mailPart)
 				}
-				_, err = io.Copy(file, p.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				if issueNumber == "" {
-					log.Fatal("Error, no issue number for attachment found")
-				}
-
-				resp := makePostRequestWithFile("/rest/api/"+jiraApiVersion+"/issue/"+issueNumber+"/attachments", "/tmp/"+filename)
-				if resp.StatusCode != 200 {
-					println("Error while adding attachment for issue " + issueNumber)
-					printErrorFromApi(resp)
-				} else {
-					log.Println("Success add attachment for issue " + issueNumber)
-				}
-				defer resp.Body.Close()
 			}
 		}
 	}
-
 }
