@@ -164,13 +164,7 @@ func replaceQuotationMarks(value string) string {
 	value = strings.Replace(value, "\"", "'", -1)
 	value = strings.Replace(value, "\\'", "'", -1)
 
-	valueEscapedByte, err := json.Marshal(value)
-	if err != nil {
-		return value
-	}
-	valueEscaped := string(valueEscapedByte)
-
-	return valueEscaped[1:len(valueEscaped)-1]
+	return value
 }
 
 func addCommentToIssue(issueNumber string, subject string, sanitizedBody string, sender string) bool {
@@ -292,7 +286,7 @@ func run() {
 
 			successful := false
 			if isMessageWithIssueNumber {
-				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, replaceQuotationMarks(value.From.String()))
+				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, jsonEscape(value.From.String()))
 				if successful {
 					err := dialer.MoveEmail(value.UID, imapDoneFolder)
 					if err != nil {
