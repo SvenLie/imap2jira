@@ -163,6 +163,7 @@ func makeGetRequest(endpoint string) *http.Response {
 func replaceQuotationMarks(value string) string {
 	value = strings.Replace(value, "\"", "'", -1)
 	value = strings.Replace(value, "\\'", "'", -1)
+
 	return value
 }
 
@@ -171,6 +172,7 @@ func addCommentToIssue(issueNumber string, subject string, sanitizedBody string,
 	if err != nil {
 		log.Fatal(err)
 	}
+	
 	// Convert []byte to string and print to screen
 	jsonString := string(content)
 	jsonString = strings.Replace(jsonString, "%SUMMARY%", subject+" ("+sender+")", 1)
@@ -186,6 +188,8 @@ func addCommentToIssue(issueNumber string, subject string, sanitizedBody string,
 
 		if resp.StatusCode != 201 {
 			println("Error while adding comment")
+			println(sender)
+			println(sanitizedBody)
 			println(jsonString)
 			printErrorFromApi(resp)
 			return false
@@ -282,7 +286,7 @@ func run() {
 
 			successful := false
 			if isMessageWithIssueNumber {
-				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, replaceQuotationMarks(value.From.String()))
+				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, jsonEscape(value.From.String()))
 				if successful {
 					err := dialer.MoveEmail(value.UID, imapDoneFolder)
 					if err != nil {
