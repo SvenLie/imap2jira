@@ -178,6 +178,7 @@ func addCommentToIssue(issueNumber string, subject string, sanitizedBody string,
 	if err != nil {
 		log.Fatal(err)
 	}
+	
 	// Convert []byte to string and print to screen
 	jsonString := string(content)
 	jsonString = strings.Replace(jsonString, "%SUMMARY%", subject+" ("+sender+")", 1)
@@ -193,6 +194,8 @@ func addCommentToIssue(issueNumber string, subject string, sanitizedBody string,
 
 		if resp.StatusCode != 201 {
 			println("Error while adding comment")
+			println(sender)
+			println(sanitizedBody)
 			println(jsonString)
 			printErrorFromApi(resp)
 			return false
