@@ -163,7 +163,14 @@ func makeGetRequest(endpoint string) *http.Response {
 func replaceQuotationMarks(value string) string {
 	value = strings.Replace(value, "\"", "'", -1)
 	value = strings.Replace(value, "\\'", "'", -1)
-	return value
+
+	valueEscaped, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	valueEscaped = string(valueEscaped)
+
+	return valueEscaped[1:len(valueEscaped)-1]
 }
 
 func addCommentToIssue(issueNumber string, subject string, sanitizedBody string, sender string) bool {
