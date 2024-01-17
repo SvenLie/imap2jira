@@ -282,7 +282,7 @@ func run() {
 
 			successful := false
 			if isMessageWithIssueNumber {
-				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, value.From.String())
+				successful = addCommentToIssue(issueNumber, subject, sanitizedBody, replaceQuotationMarks(value.From.String()))
 				if successful {
 					err := dialer.MoveEmail(value.UID, imapDoneFolder)
 					if err != nil {
