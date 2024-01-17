@@ -164,11 +164,11 @@ func replaceQuotationMarks(value string) string {
 	value = strings.Replace(value, "\"", "'", -1)
 	value = strings.Replace(value, "\\'", "'", -1)
 
-	valueEscaped, err := json.Marshal(value)
+	valueEscapedByte, err := json.Marshal(value)
 	if err != nil {
 		return value
 	}
-	valueEscaped = string(valueEscaped)
+	valueEscaped := string(valueEscapedByte)
 
 	return valueEscaped[1:len(valueEscaped)-1]
 }
