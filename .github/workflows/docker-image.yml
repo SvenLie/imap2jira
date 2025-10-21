@@ -9,27 +9,49 @@ jobs:
     if: "!github.event.release.prerelease"
     runs-on: ubuntu-latest
     steps:
-      - name: login to GitHub Container Registry
+      - name: login to Docker Hub Registry
         uses: docker/login-action@v2
         with:
           username: svenlie
           password: ${{ secrets.DOCKER_TOKEN }}
-      - uses: actions/checkout@v3
-      - name: Build the imap2jira docker image
-        run: docker build . --file ./Dockerfile --tag svenlie/imap2jira:${GITHUB_REF##*/} --tag svenlie/imap2jira:latest
-      - name: Push imap2jira docker images
-        run: docker push svenlie/imap2jira --all-tags
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64
+          push: true
+          tags: |
+              svenlie/imap2jira:latest
+              svenlie/imap2jira:${GITHUB_REF##*/}
+              ghcr.io/svenlie/imap2jira:latest
+              ghcr.io/svenlie/imap2jira:${GITHUB_REF##*/}
   build-dev:
     if: "github.event.release.prerelease"
     runs-on: ubuntu-latest
     steps:
-      - name: login to GitHub Container Registry
+      - name: login to Docker Hub Registry
         uses: docker/login-action@v2
         with:
           username: svenlie
           password: ${{ secrets.DOCKER_TOKEN }}
-      - uses: actions/checkout@v3
-      - name: Build the imap2jira docker image
-        run: docker build . --file ./Dockerfile --tag svenlie/imap2jira:${GITHUB_REF##*/} --tag svenlie/imap2jira:latest-dev
-      - name: Push imap2jira docker images
-        run: docker push svenlie/imap2jira --all-tags
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          platforms: linux/amd64
+          push: true
+          tags: |
+            svenlie/imap2jira:latest-dev
+            svenlie/imap2jira:${GITHUB_REF##*/}
+            ghcr.io/svenlie/imap2jira:latest-dev
+            ghcr.io/svenlie/imap2jira:${GITHUB_REF##*/}
