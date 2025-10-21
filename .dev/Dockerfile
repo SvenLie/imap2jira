@@ -1,4 +1,4 @@
-FROM golang:1.21-alpine
+FROM golang:1.23-alpine
 RUN go install github.com/cespare/reflex@latest
 COPY reflex.conf /
 ENTRYPOINT ["reflex", "-c", "/reflex.conf"]
