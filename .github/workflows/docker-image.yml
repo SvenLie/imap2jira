@@ -37,16 +37,13 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
+            type=raw,value=latest
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64
           push: true
-          tags: |
-              svenlie/imap2jira:latest
-              svenlie/imap2jira:${{ steps.vars.outputs.tag }}
-              ghcr.io/svenlie/imap2jira:latest
-              ghcr.io/svenlie/imap2jira:${{ steps.vars.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
   build-dev:
     if: "github.event.release.prerelease"
     runs-on: ubuntu-latest
@@ -79,13 +76,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha
+            type=raw,value=latest
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
           platforms: linux/amd64
           push: true
-          tags: |
-            svenlie/imap2jira:latest-dev
-            svenlie/imap2jira:${{ steps.vars.outputs.tag }}
-            ghcr.io/svenlie/imap2jira:latest-dev
-            ghcr.io/svenlie/imap2jira:${{ steps.vars.outputs.tag }}
+          tags: ${{ steps.meta.outputs.tags }}
