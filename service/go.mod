@@ -1,6 +1,6 @@
 module imap2jira
 
-go 1.21
+go 1.23.0
 
 require (
 	github.com/BrianLeishman/go-imap v0.1.3
@@ -25,6 +25,6 @@ require (
 	github.com/rivo/uniseg v0.4.2 // indirect
 	github.com/rs/xid v1.4.0 // indirect
 	github.com/ssor/bom v0.0.0-20170718123548-6386211fdfcf // indirect
-	golang.org/x/net v0.26.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 )
