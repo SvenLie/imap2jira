@@ -27,9 +27,9 @@ jobs:
           push: true
           tags: |
               svenlie/imap2jira:latest
-              svenlie/imap2jira:${GITHUB_REF##*/}
+              svenlie/imap2jira:${{ steps.vars.outputs.tag }}
               ghcr.io/svenlie/imap2jira:latest
-              ghcr.io/svenlie/imap2jira:${GITHUB_REF##*/}
+              ghcr.io/svenlie/imap2jira:${{ steps.vars.outputs.tag }}
   build-dev:
     if: "github.event.release.prerelease"
     runs-on: ubuntu-latest
@@ -52,6 +52,6 @@ jobs:
           push: true
           tags: |
             svenlie/imap2jira:latest-dev
-            svenlie/imap2jira:${GITHUB_REF##*/}
+            svenlie/imap2jira:${{ steps.vars.outputs.tag }}
             ghcr.io/svenlie/imap2jira:latest-dev
-            ghcr.io/svenlie/imap2jira:${GITHUB_REF##*/}
+            ghcr.io/svenlie/imap2jira:${{ steps.vars.outputs.tag }}
