@@ -1,5 +1,5 @@
 # build stage
-FROM golang:1.18-alpine
+FROM golang:1.21-alpine
 RUN mkdir -p /go/src/app
 
 COPY service/go.* /go/src/app/
